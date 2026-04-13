@@ -1,6 +1,6 @@
+numpy
 torch
 torchvision
-numpy
 tqdm
 pulp
 gurobipy

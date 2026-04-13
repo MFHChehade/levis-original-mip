@@ -1,20 +1,18 @@
 .venv/
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.python-version
-
+*.py[cod]
+*.egg-info/
+build/
+dist/
 data/
 checkpoints/
-results/
 smoke_results/
-
+results/
+logs/
 *.pt
 *.pth
+*.npz
 *.log
-*.tmp
-
 .DS_Store
 Thumbs.db
 

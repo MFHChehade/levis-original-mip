@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "levis-original-mip"
+version = "0.1.0"
+description = "Original LEVIS-style exact ReLU MIP experiments for MNIST and CIFAR-10."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "torch",
+  "torchvision",
+  "tqdm",
+  "pulp",
+  "gurobipy",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

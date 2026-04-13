@@ -1,174 +1,111 @@
-# Original LEVIS MIP for MNIST and CIFAR-10
+# Original LEVIS MIP: Exact ReLU Verification for MNIST and CIFAR-10
 
-A handoff-ready repository for the **original exact ReLU mixed-integer formulation** used to search for nearest adversarial points on small MNIST and CIFAR-10 networks.
+This repository is a structured Python project for training small ReLU networks and solving the **original exact targeted \(\ell_\infty\)** mixed-integer formulation for nearest-adversarial-point search.
 
-This repository is organized for a collaborator who wants to run the **actual exact MIP pipeline with Gurobi** on stronger hardware. The CBC path is kept only as a secondary install / sanity path and is not the main advertised workflow.
+The project supports four model families:
 
-## Scope
-
-This repository implements the **original exact nearest-adversarial-point MIP** for small ReLU networks:
-
-- decision variable is the perturbed input
-- objective minimizes the perturbation size using an exact targeted **L-infinity** formulation
-- affine layers are modeled exactly
-- ReLU nonlinearities are encoded with **exact big-M binary constraints**
-- the solver searches for a nearest targeted adversarial point for a correctly classified sample
-
-This repository is **not** the reduced-MIP / complementarity shortcut from LEVIS. It is the direct exact-MIP baseline path.
-
-## Included model families
-
-Four small verification-friendly reference networks are included.
-
-### MNIST
 - `mnist_mlp`
-  - Flatten -> Linear(784, 64) -> ReLU -> Linear(64, 64) -> ReLU -> Linear(64, 10)
 - `mnist_cnn`
-  - Conv2d(1, 4, kernel=4, stride=4) -> ReLU
-  - Conv2d(4, 4, kernel=3, stride=1, padding=1) -> ReLU
-  - Flatten -> Linear(196, 32) -> ReLU -> Linear(32, 10)
-
-### CIFAR-10
 - `cifar10_mlp`
-  - Flatten -> Linear(3072, 128) -> ReLU -> Linear(128, 64) -> ReLU -> Linear(64, 10)
 - `cifar10_cnn`
-  - Conv2d(3, 4, kernel=4, stride=4) -> ReLU
-  - Conv2d(4, 4, kernel=3, stride=1, padding=1) -> ReLU
-  - Flatten -> Linear(256, 32) -> ReLU -> Linear(32, 10)
 
-These architectures intentionally avoid max-pooling, normalization layers, and other extras so the exact MIP mapping stays transparent.
+The exact MIP supports two solver backends:
 
-## Main workflow
+- **CBC** for smoke tests and portability
+- **Gurobi** for serious full runs
 
-The intended workflow is:
-
-1. create environment
-2. train all four models on the full datasets
-3. run exact targeted MIPs with **Gurobi**
-4. collect JSON outputs for analysis
-
-The CBC runner is included only for smoke tests and debugging.
-
-## Repository status
-
-This codebase is already suitable to hand off to another researcher or collaborator.
-
-What is already working:
-- training code for all four models
-- checkpoint saving
-- exact targeted L-infinity MIP construction
-- dual backend interface with `cbc` and `gurobi`
-- successful CBC smoke tests on all four reference models
-
-What it is not:
-- not a reduced-MIP LEVIS implementation
-- not a large benchmark harness that sweeps many samples in one command
-- not a polished reproduction package for every experiment in the LEVIS paper
-
-The main exact entry point solves **one exact targeted instance per invocation**. That is still a clean and useful baseline for scripted batch runs on stronger machines.
-
-## Confirmed smoke-test status
-
-The current code has already completed successful CBC smoke tests on all four reference models.
-
-| Model | Solver | Status | Binary count | Runtime (approx.) |
-|---|---|---:|---:|---:|
-| `mnist_mlp` | CBC | Optimal | 128 | 20 s |
-| `mnist_cnn` | CBC | Optimal | 325 | 19 s |
-| `cifar10_mlp` | CBC | Optimal | 192 | 107 s |
-| `cifar10_cnn` | CBC | Optimal | 544 | 28 s |
-
-These are only sanity checks. The intended actual path is **Gurobi full runs**.
-
-## Repository layout
+## Project layout
 
 ```text
-.
-+-- exact_mip.py
-+-- models.py
-+-- train_classifier.py
-+-- run_smoke_tests.py
-+-- requirements.txt
-+-- .gitignore
-+-- PROJECT_STATUS.md
-+-- scripts/
-    +-- setup_env.ps1
-    +-- train_full.ps1
-    +-- run_full_gurobi.ps1
-    +-- run_smoke_cbc.ps1
-    +-- publish_to_github.ps1
-    +-- handoff_commands.txt
+src/levis_original_mip/
+  __init__.py
+  models.py
+  training.py
+  exact_mip.py
+  run_smoke_tests.py
+
+scripts/
+  setup_env.ps1
+  train_smoke.ps1
+  train_full.ps1
+  run_smoke_cbc.ps1
+  run_full_gurobi.ps1
+  publish_to_github.ps1
 ```
 
-## Environment setup
+## What the code does
+
+### Training
+`training.py` trains one of the supported MNIST or CIFAR-10 models and saves a checkpoint with:
+
+- `model_name`
+- `state_dict`
+- `best_test_acc`
+- training history
+
+### Exact MIP
+`exact_mip.py` builds the original exact targeted \(\ell_\infty\) formulation:
+
+- decision variable: perturbed input `x`
+- objective: minimize `t`
+- constraints: `|x - x0| <= t`
+- exact affine layer equations for `Linear` and `Conv2d`
+- exact Big-M ReLU constraints with one binary per unstable ReLU
+- targeted margin-violation constraint:
+  `logit[true_class] - logit[target_class] <= 0`
+
+### Smoke runner
+`run_smoke_tests.py` looks for one correctly classified test example per model and runs a single exact MIP instance.
+
+## Recommended usage
+
+### 1. Create the virtual environment and install the project
+```powershell
+.\scripts\setup_env.ps1
+```
+
+### 2. Run the small smoke-training pass
+```powershell
+.\scripts\train_smoke.ps1
+```
+
+### 3. Run CBC smoke tests
+```powershell
+.\scripts\run_smoke_cbc.ps1
+```
+
+### 4. Run full training for handoff / real compute
+```powershell
+.\scripts\train_full.ps1
+```
+
+### 5. Run full exact Gurobi jobs
+```powershell
+.\scripts\run_full_gurobi.ps1
+```
+
+## Notes
+
+- The CNNs are intentionally MIP-friendly:
+  - no max-pooling
+  - no batch normalization
+  - only `Conv2d`, `ReLU`, `Flatten`, and `Linear`
+- The current implementation solves **one exact instance per invocation** of `exact_mip.py`.
+- Gurobi is the intended backend for full experiments.
+- CBC is included for sanity checks and easy installation.
+
+## Example direct Python entry points
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\setup_env.ps1
+python -m levis_original_mip.training --model mnist_mlp --out_dir checkpoints --data_dir data --device cpu --epochs 3 --batch_size 128 --lr 1e-3 --train_subset 12000 --test_subset 2000
+python -m levis_original_mip.exact_mip --checkpoint checkpoints\mnist_mlp.pt --data_dir data --time_limit 300 --mip_gap 0.01 --max_candidates 1000 --solver gurobi --out_json results\mnist_mlp_full_gurobi.json
 ```
 
-## Full training
+## Status
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\train_full.ps1
-```
+The package structure is meant for handoff and GitHub publishing. The smoke path is useful for validation, but the **main intended path** is:
 
-## Full exact runs with Gurobi
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_full_gurobi.ps1
-```
-
-## Optional smoke-only path
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_smoke_cbc.ps1
-```
-
-## Direct exact-run commands
-
-```powershell
-python .\exact_mip.py --checkpoint checkpoints\mnist_mlp.pt   --data_dir data --time_limit 300 --mip_gap 0.01 --max_candidates 1000 --solver gurobi --out_json results\mnist_mlp_gurobi.json
-python .\exact_mip.py --checkpoint checkpoints\mnist_cnn.pt   --data_dir data --time_limit 300 --mip_gap 0.01 --max_candidates 1000 --solver gurobi --out_json results\mnist_cnn_gurobi.json
-python .\exact_mip.py --checkpoint checkpoints\cifar10_mlp.pt --data_dir data --time_limit 300 --mip_gap 0.01 --max_candidates 1000 --solver gurobi --out_json results\cifar10_mlp_gurobi.json
-python .\exact_mip.py --checkpoint checkpoints\cifar10_cnn.pt --data_dir data --time_limit 300 --mip_gap 0.01 --max_candidates 1000 --solver gurobi --out_json results\cifar10_cnn_gurobi.json
-```
-
-Increase the time limit and candidate search range for more serious experiments.
-
-## Suggested GitHub positioning
-
-### Repository name
-`levis-original-mip`
-
-### Title
-**Original LEVIS MIP for MNIST and CIFAR-10: Exact ReLU Verification with Gurobi**
-
-### Suggested short description
-Original LEVIS-style exact ReLU MIP baseline for MNIST and CIFAR-10, with Gurobi full runs and CBC smoke tests.
-
-## What to commit
-
-Commit:
-- source code
-- PowerShell scripts
-- `README.md`
-- `.gitignore`
-- `requirements.txt`
-- `PROJECT_STATUS.md`
-
-Do not commit:
-- `.venv/`
-- `data/`
-- `checkpoints/`
-- `results/`
-- `smoke_results/`
-- solver logs
-- temporary artifacts
-
-## Practical notes for the handoff recipient
-
-- A valid **Gurobi installation and license** are required for the intended full runs.
-- The training code automatically falls back to CPU if CUDA is unavailable.
-- The included CNNs are intentionally small and verification-friendly.
-- This repository is best viewed as a clean exact-MIP baseline repo that is easy to extend.
+1. full training
+2. exact Gurobi runs
+3. collect JSON results in `results/`
 
