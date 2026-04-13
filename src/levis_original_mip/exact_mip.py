@@ -27,19 +27,13 @@ except Exception as exc:  # pragma: no cover
 else:
     _PULP_IMPORT_ERROR = None
 
-from torchvision import datasets, transforms
-
-from .models import build_model, dataset_name_for_model
+from .data import get_datasets
+from .models import build_model
 
 
 def load_dataset_for_model(model_name: str, data_dir: Path, train: bool = False):
-    transform = transforms.ToTensor()
-    ds_name = dataset_name_for_model(model_name)
-    if ds_name == "mnist":
-        return datasets.MNIST(root=data_dir, train=train, download=True, transform=transform)
-    if ds_name == "cifar10":
-        return datasets.CIFAR10(root=data_dir, train=train, download=True, transform=transform)
-    raise ValueError(f"Unsupported dataset: {ds_name}")
+    train_ds, test_ds = get_datasets(model_name, data_dir)
+    return train_ds if train else test_ds
 
 
 def load_model(checkpoint_path: str, device: str = "cpu"):
@@ -530,4 +524,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

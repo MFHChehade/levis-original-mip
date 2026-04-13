@@ -1,3 +1,4 @@
+from __future__ import annotations
 
 import argparse
 import json
@@ -7,10 +8,10 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Subset
-from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
 
-from .models import build_model, dataset_name_for_model
+from .data import get_datasets, maybe_subset
+from .models import build_model
 
 
 def set_seed(seed: int):
@@ -21,51 +22,39 @@ def set_seed(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
-def get_datasets(model_name: str, data_dir: Path):
-    transform = transforms.ToTensor()
-    dataset_name = dataset_name_for_model(model_name)
-
-    if dataset_name == "mnist":
-        train_ds = datasets.MNIST(root=data_dir, train=True, download=True, transform=transform)
-        test_ds = datasets.MNIST(root=data_dir, train=False, download=True, transform=transform)
-        return train_ds, test_ds
-
-    if dataset_name == "cifar10":
-        train_ds = datasets.CIFAR10(root=data_dir, train=True, download=True, transform=transform)
-        test_ds = datasets.CIFAR10(root=data_dir, train=False, download=True, transform=transform)
-        return train_ds, test_ds
-
-    raise ValueError(f"Unsupported dataset: {dataset_name}")
-
-
-def maybe_subset(dataset, subset_size: int | None):
-    if subset_size is None or subset_size <= 0 or subset_size >= len(dataset):
-        return dataset
-    indices = list(range(subset_size))
-    return Subset(dataset, indices)
-
-
 @torch.no_grad()
 def evaluate(model, loader, device):
     model.eval()
+    criterion = nn.CrossEntropyLoss()
+
     total = 0
     correct = 0
     loss_sum = 0.0
-    criterion = nn.CrossEntropyLoss()
+
     for xb, yb in loader:
         xb = xb.to(device)
         yb = yb.to(device)
         logits = model(xb)
         loss = criterion(logits, yb)
         preds = logits.argmax(dim=1)
+
         total += yb.numel()
         correct += (preds == yb).sum().item()
         loss_sum += loss.item() * yb.size(0)
+
     return {
         "loss": loss_sum / max(total, 1),
         "acc": correct / max(total, 1),
         "n": total,
     }
+
+
+def resolve_device(device_name: str) -> torch.device:
+    requested = str(device_name).lower()
+    if requested.startswith("cuda") and not torch.cuda.is_available():
+        print("[warn] CUDA requested but unavailable. Falling back to CPU.")
+        return torch.device("cpu")
+    return torch.device(device_name)
 
 
 def main():
@@ -85,17 +74,18 @@ def main():
     args = parser.parse_args()
 
     set_seed(args.seed)
+
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    train_ds, test_ds = get_datasets(args.model, Path(args.data_dir))
+    train_ds, test_ds = get_datasets(args.model, args.data_dir)
     train_ds = maybe_subset(train_ds, args.train_subset if args.train_subset > 0 else None)
     test_ds = maybe_subset(test_ds, args.test_subset if args.test_subset > 0 else None)
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
-    device = torch.device(args.device)
+    device = resolve_device(args.device)
     model = build_model(args.model).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     criterion = nn.CrossEntropyLoss()
@@ -131,6 +121,7 @@ def main():
             "n": total,
         }
         test_metrics = evaluate(model, test_loader, device)
+
         row = {"epoch": epoch, "train": train_metrics, "test": test_metrics}
         history.append(row)
         print(json.dumps(row))
@@ -163,4 +154,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

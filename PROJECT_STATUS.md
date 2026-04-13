@@ -1,16 +1,15 @@
 # Project status
 
-This repository is organized as a proper Python package for handoff.
+This repository is structured as a proper Python project for handoff and external execution.
 
-## Intended main path
-- full training via `scripts/train_full.ps1`
-- full exact runs via `scripts/run_full_gurobi.ps1`
+Main path:
+1. create environment
+2. install package
+3. train full models
+4. run exact Gurobi jobs
 
-## Secondary path
-- smoke training via `scripts/train_smoke.ps1`
-- CBC smoke MIPs via `scripts/run_smoke_cbc.ps1`
+Secondary path:
+1. train smoke models
+2. run CBC smoke tests
 
-## Solver policy
-- CBC: smoke / sanity checking
-- Gurobi: full exact runs
-
+The current implementation solves one exact targeted \(\ell_\infty\) instance per invocation of `exact_mip.py`.
